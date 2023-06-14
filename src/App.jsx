@@ -1,81 +1,257 @@
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
 import "./App.css";
-import { useQuery } from "@tanstack/react-query";
-import axios from "axios";
+import { QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import Table from "@mui/material/Table";
 import TableBody from "@mui/material/TableBody";
-import TableCell from "@mui/material/TableCell";
+import TableCell, { tableCellClasses } from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Paper from "@mui/material/Paper";
-import { useState } from "react";
+import React, { useEffect, useState } from "react";
+import s from "./styles.module.css";
+import { getFullInfoById, searchByQuery } from "./services/books-api";
+import { ReactMarkdown } from "react-markdown/lib/react-markdown";
+import rehypeRaw from "rehype-raw";
+import { styled } from "@mui/material";
+import AOS from "aos";
 function App() {
-  const [isClicked, setIsClicked] = useState(null);
-  const { data, isLoading } = useQuery({
-    queryKey: ["myquery"],
-    queryFn: async () => {
-      const { data } = await axios.get(
-        "https://www.googleapis.com/books/v1/volumes?q=flowers&langRestrict=en&key=AIzaSyC39PA06hIM4P6RXk4tFDzFihjHVUO8cNw"
-      );
-      return data;
-    },
+  const [currentId, setCurrentId] = useState("");
+
+  const [query, setQuery] = useState("");
+  useEffect(() => {
+    AOS.init({
+      duration: 1000,
+    });
+  }, []);
+  const {
+    data: tableBooks,
+    isLoading,
+    isSuccess,
+    refetch: getSearchedBooks,
+    isFetched,
+  } = useQuery({
+    queryKey: ["books"],
+    queryFn: () => searchByQuery(query),
+    enabled: false,
   });
-  const handleCellClick = (id) => {
-    setIsClicked(id);
-    console.log(`Click on row with id=${id}`);
+
+  const {
+    data: detailedData,
+    isLoading: isdetailedDataLoading,
+    refetch: refetchBookData,
+  } = useQuery({
+    queryKey: ["bookInfo", currentId],
+    queryFn: () => getFullInfoById(currentId),
+    enabled: false,
+    keepPreviousData: true,
+  });
+
+  useEffect(() => {
+    currentId && refetchBookData();
+  }, [currentId, refetchBookData]);
+
+  const handleRowClick = (id) => {
+    setCurrentId(id);
   };
-  console.log(data);
   return (
     <>
+      <ReactQueryDevtools />
       <div>
-        {isLoading ? (
-          <h1>Data is loading</h1>
-        ) : (
-          <TableContainer component={Paper}>
-            <Table sx={{ minWidth: 650 }} aria-label="simple table">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Title</TableCell>
-                  <TableCell align="right">Author</TableCell>
-                  <TableCell align="right">ID</TableCell>
-                  <TableCell align="right">Link</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {data.items.map((item) => (
-                  <>
-                    {" "}
-                    <TableRow
-                      onClick={() => {
-                        handleCellClick(item.id);
-                      }}
-                      key={item.id}
-                      sx={{ "&:last-child td, &:last-child th": { border: 0 } }}
-                    >
-                      <TableCell component="th" scope="row">
-                        {item.volumeInfo.title}
-                      </TableCell>
-                      <TableCell align="right">
-                        {item.volumeInfo.authors?.join(", ")}
-                      </TableCell>
-                      <TableCell align="right">{item.id}</TableCell>
-                      <TableCell align="right">
-                        <a href={item.volumeInfo.infoLink}>
-                          {" "}
-                          {item.volumeInfo.infoLink}
-                        </a>
-                      </TableCell>
-                    </TableRow>
-                    {isClicked === item.id && <div>FULL info</div>}
-                  </>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+        <form
+          data-aos="fade-up"
+          onSubmit={(e) => {
+            e.preventDefault();
+            getSearchedBooks();
+          }}
+        >
+          {" "}
+          <input
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+            }}
+            type="text"
+            placeholder="Type book title that you wanna to search..."
+          />
+          <button>Search</button>
+        </form>
+        {isFetched && (
+          <>
+            {isLoading && <h1>Data is loading</h1>}
+            {isSuccess && (
+              <TableContainer component={Paper}>
+                <Table sx={{ minWidth: 650 }} aria-label="simple table">
+                  <TableHead>
+                    <StyledTableRow>
+                      <StyledTableCell>Title</StyledTableCell>
+                      <StyledTableCell align="right">Author</StyledTableCell>
+                      <StyledTableCell align="right">ID</StyledTableCell>
+                      <StyledTableCell align="right">Link</StyledTableCell>
+                    </StyledTableRow>
+                  </TableHead>
+                  <TableBody>
+                    {tableBooks.items.map((item) => {
+                      const {
+                        id,
+                        volumeInfo: { authors, title, infoLink },
+                      } = item;
+                      return (
+                        <React.Fragment key={id}>
+                          <StyledTableRow
+                            onClick={() => {
+                              handleRowClick(id);
+                            }}
+                            sx={{
+                              "&:last-child td, &:last-child th": { border: 0 },
+                            }}
+                          >
+                            <StyledTableCell component="th" scope="row">
+                              {title}
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                              {authors?.join(", ")}
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                              {item.id}
+                            </StyledTableCell>
+                            <StyledTableCell align="right">
+                              <a href={infoLink}>{infoLink}</a>
+                            </StyledTableCell>
+                          </StyledTableRow>
+                          {currentId === item.id && (
+                            <StyledTableRow>
+                              <StyledTableCell colSpan={4}>
+                                <div data-aos="fade-up">
+                                  {detailedData && (
+                                    <>
+                                      <h2>
+                                        <span>
+                                          {detailedData.volumeInfo.title}
+                                        </span>
+                                        {detailedData.volumeInfo.subtitle && (
+                                          <span>
+                                            ,{detailedData.volumeInfo.subtitle}
+                                          </span>
+                                        )}
+                                      </h2>
+                                      <div className={s.contentWrapper}>
+                                        <div>
+                                          {" "}
+                                          <img
+                                            src={
+                                              detailedData.volumeInfo.imageLinks
+                                                .thumbnail
+                                            }
+                                          />
+                                        </div>
+                                        <ul className={s.contentList}>
+                                          {detailedData.volumeInfo.authors && (
+                                            <li>
+                                              <p>
+                                                <b>Author: </b>
+                                                {detailedData.volumeInfo.authors.join(
+                                                  ", "
+                                                )}
+                                              </p>
+                                            </li>
+                                          )}
+                                          {detailedData.volumeInfo
+                                            .publisher && (
+                                            <li>
+                                              <p>
+                                                <b>Publisher: </b>
+                                                {
+                                                  detailedData.volumeInfo
+                                                    .publisher
+                                                }
+                                                ,
+                                                {
+                                                  detailedData.volumeInfo
+                                                    .publishedDate
+                                                }
+                                              </p>
+                                            </li>
+                                          )}
+                                          {detailedData.volumeInfo
+                                            .printType && (
+                                            <li>
+                                              <p>
+                                                <b>Print type: </b>
+                                                {
+                                                  detailedData.volumeInfo
+                                                    .printType
+                                                }
+                                              </p>
+                                            </li>
+                                          )}
+                                          {detailedData.volumeInfo
+                                            .pageCount && (
+                                            <li>
+                                              <p>
+                                                <b>Page count: </b>
+                                                {
+                                                  detailedData.volumeInfo
+                                                    .pageCount
+                                                }
+                                              </p>
+                                            </li>
+                                          )}
+                                          {detailedData.volumeInfo
+                                            .description && (
+                                            <li>
+                                              {" "}
+                                              <b>Description: </b>
+                                              <ReactMarkdown
+                                                className={s.descrContainer}
+                                                rehypePlugins={[rehypeRaw]}
+                                              >
+                                                {
+                                                  detailedData.volumeInfo
+                                                    .description
+                                                }
+                                              </ReactMarkdown>{" "}
+                                            </li>
+                                          )}
+                                        </ul>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </StyledTableCell>
+                            </StyledTableRow>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            )}
+          </>
         )}
       </div>
     </>
   );
 }
 
+const StyledTableCell = styled(TableCell)(({ theme }) => ({
+  [`&.${tableCellClasses.head}`]: {
+    backgroundColor: theme.palette.primary.light,
+    color: theme.palette.common.white,
+  },
+  [`&.${tableCellClasses.body}`]: {
+    fontSize: 14,
+  },
+}));
+
+const StyledTableRow = styled(TableRow)(({ theme }) => ({
+  "&:nth-of-type(odd)": {
+    backgroundColor: theme.palette.action.hover,
+  },
+  // hide last border
+  "&:last-child td, &:last-child th": {
+    border: 0,
+  },
+}));
 export default App;
