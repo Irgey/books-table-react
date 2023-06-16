@@ -6,12 +6,12 @@ import { getFullInfoById } from "../../services/books-api";
 import { ReactMarkdown } from "react-markdown/lib/react-markdown";
 import rehypeRaw from "rehype-raw";
 import { styled } from "@mui/material";
-import { useParams, useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 
 export const BooksDetails = () => {
-  const [searchParams, setSearchParams] = useSearchParams();
+  const [searchParams] = useSearchParams();
   const bookId = searchParams.get("details");
-  const { data: detailedData, refetch: refetchBookData } = useQuery({
+  const { data: detailedData } = useQuery({
     queryKey: ["bookInfo", bookId],
     queryFn: () => getFullInfoById(bookId),
     keepPreviousData: true,
